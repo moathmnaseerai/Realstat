@@ -381,12 +381,54 @@
 
 <!-- PAGE: STATS -->
 <div class="page" id="page-stats">
-  <div class="charts-grid">
-    <div class="chart-box"><h4>الطلبات حسب الحالة</h4><canvas id="chartStatus" height="200"></canvas></div>
-    <div class="chart-box"><h4>نوع الطلب (شراء / إيجار)</h4><canvas id="chartType" height="200"></canvas></div>
-    <div class="chart-box"><h4>نوع العقار</h4><canvas id="chartProp" height="200"></canvas></div>
-    <div class="chart-box"><h4>توزيع الميزانيات</h4><canvas id="chartBudget" height="200"></canvas></div>
+
+  <!-- KPI Row -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:18px" id="kpiRow"></div>
+
+  <!-- AI Insight Banner -->
+  <div id="insightBanner" style="background:linear-gradient(135deg,#1a2d5a 0%,#243b73 100%);border-radius:14px;padding:16px 22px;margin-bottom:18px;color:#fff;display:flex;align-items:flex-start;gap:14px">
+    <div style="font-size:1.6rem;line-height:1">📊</div>
+    <div><div style="font-size:.75rem;color:#6dc52c;font-weight:700;margin-bottom:4px">ملخص تحليلي</div><div id="insightText" style="font-size:.88rem;line-height:1.8;color:rgba(255,255,255,.9)"></div></div>
   </div>
+
+  <!-- Charts Row 1 -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:16px">
+    <div class="chart-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h4 style="margin:0">حالة الطلبات</h4>
+        <span id="convRate" style="font-size:.75rem;background:#e8f9d4;color:#4fa01e;padding:3px 10px;border-radius:20px;font-weight:700"></span>
+      </div>
+      <div style="position:relative;height:200px"><canvas id="chartStatus"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <h4 style="margin-bottom:12px">نوع الطلب</h4>
+      <div style="position:relative;height:200px"><canvas id="chartType"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <h4 style="margin-bottom:12px">نوع العقار</h4>
+      <div style="position:relative;height:200px"><canvas id="chartProp"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Charts Row 2 -->
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">
+    <div class="chart-box">
+      <h4 style="margin-bottom:12px">توزيع الميزانيات</h4>
+      <div style="position:relative;height:200px"><canvas id="chartBudget"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <h4 style="margin-bottom:12px">المناطق الأكثر طلباً</h4>
+      <div id="topAreas" style="font-size:.85rem"></div>
+    </div>
+  </div>
+
+  <!-- Monthly trend -->
+  <div class="chart-box" style="margin-bottom:16px">
+    <h4 style="margin-bottom:12px">الطلبات الشهرية (آخر 6 أشهر)</h4>
+    <div style="position:relative;height:160px"><canvas id="chartMonthly"></canvas></div>
+  </div>
+
+  <!-- Follow-up table -->
   <div class="table-wrap">
     <div class="table-header"><span class="table-title">📅 المواعيد القادمة للمتابعة</span></div>
     <div style="overflow-x:auto"><table><thead><tr><th>العميل</th><th>الهاتف</th><th>موعد المتابعة</th><th>الحالة</th><th>ملاحظات</th></tr></thead><tbody id="followTable"></tbody></table></div>
@@ -678,41 +720,91 @@ $('clientModal').addEventListener('click',function(e){if(e.target===this)closeMo
 
 function openAddModal(){switchTab('add');resetForm();}
 
-// -------- CHARTS --------
+// -------- CHARTS / ANALYTICS --------
 function renderCharts(){
+  if(!clients) return;
   const statusCount = {new:0,followup:0,done:0,lost:0};
   const typeCount = {buy:0,rent:0};
   const propCount = {apt:0,land:0,villa:0,building:0,office:0};
   const budgetRanges = {'أقل من 50k':0,'50-100k':0,'100-200k':0,'200-500k':0,'أكثر من 500k':0};
+  const areaMap = {};
+  const monthMap = {};
+
   clients.forEach(c=>{
     if(statusCount[c.status]!==undefined) statusCount[c.status]++;
     if(typeCount[c.type]!==undefined) typeCount[c.type]++;
     if(propCount[c.prop]!==undefined) propCount[c.prop]++;
-    const b = parseFloat(c.budget)||0;
+    const b=parseFloat(c.budget)||0;
     if(b<50000) budgetRanges['أقل من 50k']++;
     else if(b<100000) budgetRanges['50-100k']++;
     else if(b<200000) budgetRanges['100-200k']++;
     else if(b<500000) budgetRanges['200-500k']++;
     else budgetRanges['أكثر من 500k']++;
+    if(c.area){const a=c.area.trim();areaMap[a]=(areaMap[a]||0)+1;}
+    if(c.date){const m=c.date.slice(0,7);monthMap[m]=(monthMap[m]||0)+1;}
   });
 
-  const colorsStatus = ['#1a2d5a','#f59e0b','#22c55e','#e53935'];
-  const colorsType = ['#1a2d5a','#6dc52c'];
-  const colorsProp = ['#1a2d5a','#6dc52c','#f59e0b','#0369a1','#7c3aed'];
-  const colorsBudget = ['#1a2d5a','#2563eb','#6dc52c','#f59e0b','#e53935'];
+  const total=clients.length;
+  const totalBudget=clients.reduce((s,c)=>s+(parseFloat(c.budget)||0),0);
+  const avgBudget=total?Math.round(totalBudget/total):0;
+  const doneCount=statusCount['done'];
+  const convPct=total?Math.round(doneCount/total*100):0;
+  const totalCommission=clients.reduce((s,c)=>s+(parseFloat(c.commVal)||0),0);
 
-  makeDonut('chartStatus',Object.keys(statusCount).map(k=>statusLabels[k]),Object.values(statusCount),colorsStatus);
-  makeDonut('chartType',['شراء','إيجار'],Object.values(typeCount),colorsType);
-  makeDonut('chartProp',Object.keys(propCount).map(k=>propLabels[k]),Object.values(propCount),colorsProp);
-  makeBar('chartBudget',Object.keys(budgetRanges),Object.values(budgetRanges),colorsBudget);
+  // KPI cards
+  const kpis=[
+    {label:'إجمالي العملاء',val:total,icon:'👥',color:'#1a2d5a'},
+    {label:'نسبة الإغلاق',val:convPct+'%',icon:'✅',color:'#4fa01e'},
+    {label:'متوسط الميزانية',val:(avgBudget/1000).toFixed(1)+'K د.أ',icon:'💰',color:'#2563eb'},
+    {label:'إجمالي العمولات',val:(totalCommission/1000).toFixed(1)+'K د.أ',icon:'🏆',color:'#f59e0b'},
+    {label:'بانتظار المتابعة',val:statusCount['followup'],icon:'📞',color:'#e53935'},
+  ];
+  $('kpiRow').innerHTML=kpis.map(k=>`
+    <div class="stat-card" style="border-right:4px solid ${k.color}">
+      <div style="font-size:1.3rem;margin-bottom:4px">${k.icon}</div>
+      <div class="stat-val" style="color:${k.color};font-size:1.4rem">${k.val}</div>
+      <div class="stat-label">${k.label}</div>
+    </div>`).join('');
+
+  // Insight text
+  const topProp=Object.entries(propCount).sort((a,b)=>b[1]-a[1])[0];
+  const topArea=Object.entries(areaMap).sort((a,b)=>b[1]-a[1])[0];
+  const newPct=total?Math.round(statusCount['new']/total*100):0;
+  $('insightText').innerHTML=`لديك <strong>${total}</strong> طلب مسجّل، نسبة الإغلاق <strong>${convPct}%</strong>${convPct>=20?' (ممتازة 🔥)':convPct>=10?' (جيدة)':' — تحتاج متابعة أكثر'}. أكثر العقارات طلباً: <strong>${propLabels[topProp?.[0]]||'-'}</strong>${topArea?' • المنطقة الأكثر طلباً: <strong>'+topArea[0]+'</strong>':''}. <strong>${newPct}%</strong> من الطلبات لم تُتابَع بعد.`;
+  $('convRate').textContent='إغلاق '+convPct+'%';
+
+  makeDonut('chartStatus',Object.keys(statusCount).map(k=>statusLabels[k]),Object.values(statusCount),['#1a2d5a','#f59e0b','#22c55e','#e53935']);
+  makeDonut('chartType',['شراء','إيجار'],Object.values(typeCount),['#1a2d5a','#6dc52c']);
+  makeDonut('chartProp',Object.keys(propCount).map(k=>propLabels[k]),Object.values(propCount),['#1a2d5a','#6dc52c','#f59e0b','#0369a1','#7c3aed']);
+  makeBar('chartBudget',Object.keys(budgetRanges),Object.values(budgetRanges),['#1a2d5a','#2563eb','#6dc52c','#f59e0b','#e53935']);
+
+  // Monthly trend (last 6 months)
+  const now=new Date();
+  const months=[];const mLabels=[];
+  for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);const key=d.toISOString().slice(0,7);months.push(monthMap[key]||0);mLabels.push(d.toLocaleDateString('ar-JO',{month:'short',year:'2-digit'}));}
+  makeLineChart('chartMonthly',mLabels,months);
+
+  // Top areas
+  const topAreas=Object.entries(areaMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const maxA=topAreas[0]?.[1]||1;
+  $('topAreas').innerHTML=topAreas.length===0?'<div style="color:var(--muted);text-align:center;padding:20px">لا توجد بيانات</div>':
+    topAreas.map(([name,cnt],i)=>`
+      <div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:3px">
+          <span style="font-weight:700">${name}</span><span style="color:var(--muted)">${cnt} طلب</span>
+        </div>
+        <div style="background:#f0f3fa;border-radius:4px;height:7px">
+          <div style="background:${['#1a2d5a','#6dc52c','#2563eb','#f59e0b','#e53935'][i]};height:7px;border-radius:4px;width:${Math.round(cnt/maxA*100)}%;transition:width .5s"></div>
+        </div>
+      </div>`).join('');
 
   // Follow-up table
-  const today = new Date().toISOString().slice(0,10);
-  const upcoming = clients.filter(c=>c.nextfollow && c.nextfollow>=today && c.status!=='done' && c.status!=='lost')
+  const todayStr=new Date().toISOString().slice(0,10);
+  const upcoming=clients.filter(c=>c.nextfollow&&c.nextfollow>=todayStr&&c.status!=='done'&&c.status!=='lost')
     .sort((a,b)=>a.nextfollow.localeCompare(b.nextfollow)).slice(0,10);
-  $('followTable').innerHTML = upcoming.length===0
-    ? '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">لا توجد مواعيد قادمة</td></tr>'
-    : upcoming.map(c=>`<tr><td style="font-weight:700">${c.name}</td><td>${c.phone}</td><td style="color:var(--green-dark);font-weight:700">${c.nextfollow}</td><td><span class="badge ${statusClass[c.status]}">${statusLabels[c.status]}</span></td><td style="font-size:.8rem">${c.followup||'-'}</td></tr>`).join('');
+  $('followTable').innerHTML=upcoming.length===0
+    ?'<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">لا توجد مواعيد قادمة</td></tr>'
+    :upcoming.map(c=>`<tr><td style="font-weight:700">${c.name}</td><td>${c.phone}</td><td style="color:var(--green-dark);font-weight:700">${c.nextfollow}</td><td><span class="badge ${statusClass[c.status]}">${statusLabels[c.status]}</span></td><td style="font-size:.8rem">${c.followup||'-'}</td></tr>`).join('');
 }
 
 function makeDonut(id, labels, data, colors){
@@ -725,47 +817,128 @@ function makeBar(id, labels, data, colors){
   const ctx = $(id).getContext('2d');
   charts[id] = new Chart(ctx,{type:'bar',data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}}});
 }
+function makeLineChart(id, labels, data){
+  if(charts[id]) charts[id].destroy();
+  const ctx=$(id).getContext('2d');
+  charts[id]=new Chart(ctx,{type:'line',data:{labels,datasets:[{data,borderColor:'#1a2d5a',backgroundColor:'rgba(26,45,90,0.08)',borderWidth:2.5,pointBackgroundColor:'#6dc52c',pointBorderColor:'#fff',pointRadius:5,tension:0.4,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1},grid:{color:'rgba(0,0,0,0.05)'}},x:{grid:{display:false}}}}});
+}
 
-// -------- PRINT CLIENT PDF --------
+// -------- PRINT CLIENT PDF (Arabic HTML Print) --------
 function printClientPDF(id){
   const c = clients.find(x=>x.id===id);
   if(!c) return;
-  const {jsPDF} = window.jspdf;
-  const doc = new jsPDF({unit:'mm',format:'a4'});
-  // Header
-  doc.setFillColor(26,45,90);
-  doc.rect(0,0,210,30,'F');
-  doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(109,197,44);
-  doc.text('Amman Real Estate',105,12,{align:'center'});
-  doc.setFontSize(10);doc.setTextColor(255,255,255);
-  doc.text('نظام متابعة العملاء - تقرير عميل',105,22,{align:'center'});
-  // Content
-  let y=40;
-  doc.setTextColor(26,45,90);doc.setFontSize(13);doc.setFont('helvetica','bold');
-  doc.text('Client Report / تقرير عميل',105,y,{align:'center'});
-  y+=10;
-  doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(50,50,50);
-  const fields=[
-    ['Name / الاسم',c.name],['Phone / الهاتف',c.phone],['National ID',c.nid||'-'],
-    ['Email',c.email||'-'],['Request Type',typeLabels[c.type]||c.type],['Property',propLabels[c.prop]||c.prop],
-    ['Area / المنطقة',c.area||'-'],['Budget (JD)',c.budget?Number(c.budget).toLocaleString():'-'],
-    ['Rooms',c.rooms||'-'],['Size (m²)',c.size||'-'],['Status',statusLabels[c.status]],
-    ['Date',c.date||'-'],['Last Contact',c.lastcontact||'-'],['Next Follow-up',c.nextfollow||'-'],
-  ];
-  fields.forEach(([l,v])=>{
-    if(y>270){doc.addPage();y=20;}
-    doc.setFont('helvetica','bold');doc.text(l+':',15,y);
-    doc.setFont('helvetica','normal');doc.text(String(v||'-'),70,y);
-    y+=7;
-  });
-  if(c.eng){y+=4;doc.setFont('helvetica','bold');doc.text('Engineering Notes:',15,y);y+=6;doc.setFont('helvetica','normal');const lines=doc.splitTextToSize(c.eng,160);doc.text(lines,15,y);y+=lines.length*5+4;}
-  if(c.notes){doc.setFont('helvetica','bold');doc.text('Notes:',15,y);y+=6;doc.setFont('helvetica','normal');const lines=doc.splitTextToSize(c.notes,160);doc.text(lines,15,y);y+=lines.length*5+4;}
-  if(c.followup){doc.setFont('helvetica','bold');doc.text('Follow-up:',15,y);y+=6;doc.setFont('helvetica','normal');const lines=doc.splitTextToSize(c.followup,160);doc.text(lines,15,y);y+=lines.length*5;}
-  // Footer
-  doc.setFillColor(26,45,90);doc.rect(0,287,210,10,'F');
-  doc.setFontSize(8);doc.setTextColor(255,255,255);
-  doc.text('Amman Real Estate | '+new Date().toLocaleDateString('en-GB'),105,293,{align:'center'});
-  doc.save('client-'+c.name.replace(/\s/g,'-')+'.pdf');
+  const sourceLabels={direct:'مباشر',referral:'توصية',social:'وسائل التواصل',website:'الموقع الإلكتروني',other:'أخرى'};
+  const html=`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>تقرير عميل - ${c.name}</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Tajawal',sans-serif;background:#fff;color:#1a1a2e;direction:rtl;font-size:11pt}
+  @page{size:A4;margin:15mm 15mm 20mm 15mm}
+  .header{background:#1a2d5a;color:#fff;padding:16px 22px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+  .header-logo{font-size:18pt;font-weight:800;color:#6dc52c}
+  .header-sub{font-size:9pt;color:rgba(255,255,255,.7);margin-top:2px}
+  .header-date{font-size:9pt;color:rgba(255,255,255,.6);text-align:left}
+  .title-bar{background:#f0f3fa;border-right:5px solid #1a2d5a;padding:10px 16px;border-radius:0 6px 6px 0;margin-bottom:16px}
+  .title-bar h1{font-size:13pt;font-weight:800;color:#1a2d5a}
+  .title-bar .badge-status{display:inline-block;padding:2px 12px;border-radius:20px;font-size:9pt;font-weight:700;margin-right:8px;background:${c.status==='done'?'#dcfce7':c.status==='new'?'#dbeafe':c.status==='followup'?'#fef3c7':'#fee2e2'};color:${c.status==='done'?'#166534':c.status==='new'?'#1e40af':c.status==='followup'?'#92400e':'#991b1b'}}
+  .section{margin-bottom:16px}
+  .section-title{font-size:10pt;font-weight:800;color:#1a2d5a;border-bottom:1.5px solid #d8e0ef;padding-bottom:5px;margin-bottom:10px}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .field{background:#f8fafd;border-radius:6px;padding:8px 10px;border:0.5px solid #e2e8f5}
+  .field-label{font-size:8pt;color:#6b7a99;font-weight:700;margin-bottom:2px}
+  .field-val{font-size:10pt;font-weight:700;color:#1a2d5a}
+  .notes-box{background:#f8fafd;border-radius:6px;padding:10px 14px;border:0.5px solid #e2e8f5;line-height:1.9;font-size:10pt;color:#333}
+  .highlight-box{background:#1a2d5a;border-radius:8px;padding:12px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+  .hl-item{text-align:center}
+  .hl-val{font-size:14pt;font-weight:800;color:#6dc52c}
+  .hl-label{font-size:8pt;color:rgba(255,255,255,.7);margin-top:2px}
+  .footer{margin-top:20px;border-top:1px solid #d8e0ef;padding-top:10px;display:flex;justify-content:space-between;font-size:8pt;color:#999}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <div class="header-logo">عمّان للعقاري</div>
+    <div class="header-sub">Amman Real Estate | نظام إدارة العملاء</div>
+  </div>
+  <div class="header-date">تاريخ الطباعة<br>${new Date().toLocaleDateString('ar-JO',{year:'numeric',month:'long',day:'numeric'})}</div>
+</div>
+
+<div class="title-bar">
+  <h1>${c.name} <span class="badge-status">${statusLabels[c.status]}</span></h1>
+</div>
+
+<div class="highlight-box">
+  <div class="hl-item"><div class="hl-val">${c.budget?Number(c.budget).toLocaleString('ar-JO'):'-'}</div><div class="hl-label">الميزانية (د.أ)</div></div>
+  <div class="hl-item"><div class="hl-val">${typeLabels[c.type]||'-'}</div><div class="hl-label">نوع الطلب</div></div>
+  <div class="hl-item"><div class="hl-val">${propLabels[c.prop]||'-'}</div><div class="hl-label">نوع العقار</div></div>
+</div>
+
+<div class="section">
+  <div class="section-title">📋 البيانات الأساسية</div>
+  <div class="grid">
+    <div class="field"><div class="field-label">الهاتف</div><div class="field-val">${c.phone||'-'}</div></div>
+    <div class="field"><div class="field-label">الرقم الوطني</div><div class="field-val">${c.nid||'-'}</div></div>
+    <div class="field"><div class="field-label">البريد الإلكتروني</div><div class="field-val">${c.email||'-'}</div></div>
+    <div class="field"><div class="field-label">مصدر العميل</div><div class="field-val">${sourceLabels[c.source]||c.source||'-'}</div></div>
+    <div class="field"><div class="field-label">تاريخ الطلب</div><div class="field-val">${c.date||'-'}</div></div>
+    <div class="field"><div class="field-label">الحالة</div><div class="field-val">${statusLabels[c.status]}</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">🏠 تفاصيل العقار المطلوب</div>
+  <div class="grid">
+    <div class="field"><div class="field-label">نوع العقار</div><div class="field-val">${propLabels[c.prop]||'-'}</div></div>
+    <div class="field"><div class="field-label">المنطقة المطلوبة</div><div class="field-val">${c.area||'-'}</div></div>
+    <div class="field"><div class="field-label">الميزانية</div><div class="field-val">${c.budget?Number(c.budget).toLocaleString('ar-JO')+' د.أ':'-'}</div></div>
+    <div class="field"><div class="field-label">عدد الغرف</div><div class="field-val">${c.rooms||'-'}</div></div>
+    <div class="field"><div class="field-label">المساحة</div><div class="field-val">${c.size?c.size+' م²':'-'}</div></div>
+    <div class="field"><div class="field-label">الطابق المفضل</div><div class="field-val">${c.floor||'-'}</div></div>
+  </div>
+  ${c.requirements?`<div style="margin-top:8px"><div class="field-label" style="margin-bottom:4px;font-size:8.5pt;font-weight:700;color:#6b7a99">متطلبات إضافية</div><div class="notes-box">${c.requirements}</div></div>`:''}
+</div>
+
+${c.eng||c.notes?`<div class="section">
+  <div class="section-title">🔧 الملاحظات الهندسية والعامة</div>
+  ${c.eng?`<div style="margin-bottom:8px"><div class="field-label" style="margin-bottom:4px;font-size:8.5pt;font-weight:700;color:#6b7a99">ملاحظات هندسية تقنية</div><div class="notes-box" style="border-right:3px solid #1a2d5a">${c.eng}</div></div>`:''}
+  ${c.notes?`<div><div class="field-label" style="margin-bottom:4px;font-size:8.5pt;font-weight:700;color:#6b7a99">ملاحظات عامة</div><div class="notes-box">${c.notes}</div></div>`:''}
+</div>`:''}
+
+<div class="section">
+  <div class="section-title">📞 سجل المتابعة</div>
+  <div class="grid-2">
+    <div class="field"><div class="field-label">تاريخ آخر تواصل</div><div class="field-val">${c.lastcontact||'-'}</div></div>
+    <div class="field"><div class="field-label">موعد المتابعة القادم</div><div class="field-val" style="color:${c.nextfollow?'#4fa01e':'#1a2d5a'}">${c.nextfollow||'-'}</div></div>
+  </div>
+  ${c.followup?`<div style="margin-top:8px"><div class="notes-box">${c.followup}</div></div>`:''}
+</div>
+
+${c.dealVal?`<div class="section">
+  <div class="section-title">🤝 تفاصيل الصفقة</div>
+  <div class="grid">
+    <div class="field"><div class="field-label">وصف العقار</div><div class="field-val">${c.propDesc||'-'}</div></div>
+    <div class="field"><div class="field-label">قيمة الصفقة</div><div class="field-val">${c.dealVal?Number(c.dealVal).toLocaleString('ar-JO')+' د.أ':'-'}</div></div>
+    <div class="field"><div class="field-label">العمولة</div><div class="field-val">${c.commission?c.commission+'% = '+Number(c.commVal||0).toLocaleString('ar-JO')+' د.أ':'-'}</div></div>
+  </div>
+</div>`:''}
+
+<div class="footer">
+  <span>عمّان للعقاري | Amman Real Estate</span>
+  <span>وثيقة سرية — للاستخدام الداخلي فقط</span>
+  <span>${new Date().toLocaleDateString('ar-JO')}</span>
+</div>
+<script>window.onload=function(){window.print();}<\/script>
+</body></html>`;
+  const w=window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
 }
 
 // -------- PLEDGE PDF --------
