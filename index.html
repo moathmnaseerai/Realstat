@@ -5,7 +5,35 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>عمّان للعقاري - نظام متابعة العملاء</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getFirestore, doc, setDoc, onSnapshot, collection } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyASSUYkSpOIM-10jqWQ0ojqEv886NNdCTQ",
+    authDomain: "ammanre-30778.firebaseapp.com",
+    projectId: "ammanre-30778",
+    storageBucket: "ammanre-30778.firebasestorage.app",
+    messagingSenderId: "907674537431",
+    appId: "1:907674537431:web:908cd4a8e402296ce0cf92",
+    measurementId: "G-DXJRNLKL02"
+  };
+
+  try {
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    window._fbDb = db;
+    window._fbDoc = doc;
+    window._fbSetDoc = setDoc;
+    window._fbOnSnapshot = onSnapshot;
+    window._fbCollection = collection;
+    window._fbReady = true;
+    console.log('Firebase Firestore connected ✅');
+  } catch(e) {
+    window._fbReady = false;
+    console.warn('Firebase error:', e);
+  }
+</script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
 
@@ -209,6 +237,8 @@
   <div class="tab active" onclick="switchTab('clients')">🏠 العملاء</div>
   <div class="tab" onclick="switchTab('add')">➕ طلب جديد</div>
   <div class="tab" onclick="switchTab('stats')">📊 الإحصائيات</div>
+  <div class="tab" onclick="switchTab('properties')">🏗️ عقاراتي</div>
+  <div class="tab" onclick="switchTab('analysis')">🤖 تحليل العملاء</div>
   <div class="tab" onclick="switchTab('pledge')">📄 طباعة تعهد</div>
 </div>
 
@@ -435,6 +465,68 @@
   </div>
 </div>
 
+<!-- PAGE: PROPERTIES -->
+<div class="page" id="page-properties">
+  <div class="form-card">
+    <div class="form-card-header"><span class="icon">🏗️</span> إضافة عقار جديد</div>
+    <div class="form-body">
+      <div class="form-grid">
+        <div class="form-group"><label>نوع العقار *</label>
+          <select id="pr-type"><option value="apt">شقة</option><option value="land">أرض</option><option value="villa">فيلا</option><option value="building">مجمع/بناء</option><option value="office">مكتب/محل</option></select>
+        </div>
+        <div class="form-group"><label>المنطقة *</label><input type="text" id="pr-area" placeholder="مثال: الرابية، الجبيهة..."></div>
+        <div class="form-group"><label>السعر (د.أ) *</label><input type="number" id="pr-price" placeholder="مثال: 85000"></div>
+        <div class="form-group"><label>نوع العرض</label>
+          <select id="pr-offer"><option value="sell">للبيع</option><option value="rent">للإيجار</option></select>
+        </div>
+        <div class="form-group"><label>المساحة (م²)</label><input type="number" id="pr-size" placeholder="مثال: 140"></div>
+        <div class="form-group"><label>عدد الغرف</label>
+          <select id="pr-rooms"><option value="">غير محدد</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5+</option></select>
+        </div>
+        <div class="form-group"><label>الطابق</label><input type="text" id="pr-floor" placeholder="مثال: أرضي، 2..."></div>
+        <div class="form-group"><label>حالة العقار</label>
+          <select id="pr-status"><option value="available">متاح</option><option value="reserved">محجوز</option><option value="sold">مباع</option></select>
+        </div>
+        <div class="form-group full"><label>وصف العقار</label><textarea id="pr-desc" placeholder="تفاصيل إضافية: تشطيبات، موقف، إطلالة، مميزات..."></textarea></div>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn-secondary" onclick="resetPropForm()">مسح</button>
+      <button type="button" class="btn-primary" onclick="saveProperty()">💾 حفظ العقار</button>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-header">
+      <span class="table-title">🏗️ قائمة عقاراتي</span>
+      <span id="prop-count" style="font-size:.8rem;color:var(--muted)"></span>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>#</th><th>النوع</th><th>المنطقة</th><th>السعر</th><th>العرض</th><th>المساحة</th><th>الغرف</th><th>الحالة</th><th>الوصف</th><th>إجراءات</th></tr></thead>
+        <tbody id="propertiesBody"></tbody>
+      </table>
+      <div class="empty-state" id="propEmpty" style="display:none"><div class="empty-icon">🏗️</div><div>لا توجد عقارات. أضف أول عقار!</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: ANALYSIS -->
+<div class="page" id="page-analysis">
+  <div style="background:linear-gradient(135deg,#1a2d5a,#243b73);border-radius:14px;padding:18px 22px;margin-bottom:18px;color:#fff;display:flex;align-items:center;gap:14px">
+    <div style="font-size:2rem">🤖</div>
+    <div>
+      <div style="font-size:1rem;font-weight:800;margin-bottom:4px">تحليل وتشبيك العملاء مع العقارات</div>
+      <div style="font-size:.85rem;color:rgba(255,255,255,.7)">يقارن النظام متطلبات كل عميل مع عقاراتك المتاحة ويقترح أفضل تطابق</div>
+    </div>
+    <div style="margin-right:auto;display:flex;gap:8px">
+      <button onclick="runAnalysis()" class="btn btn-green">▶ تشغيل التحليل</button>
+      <button onclick="printAnalysisPDF()" class="btn btn-outline">🖨️ PDF</button>
+    </div>
+  </div>
+  <div id="analysisResults"></div>
+</div>
+
 <!-- PAGE: PLEDGE -->
 <div class="page" id="page-pledge">
   <div class="form-card">
@@ -511,13 +603,60 @@ function logout(){
 function storeKey(){return 'amman_re_clients_'+currentUser;}
 
 let clients=[];
+let properties=[];
 let editingId=null;
 let charts={};
 
 function initApp(){
+  // Load from localStorage immediately (instant display)
   clients=JSON.parse(localStorage.getItem(storeKey())||'[]');
+  properties=JSON.parse(localStorage.getItem(storeKey()+'_props')||'[]');
   updateStats();
   renderTable();
+
+  // Sync with Firestore when ready
+  function startFirestoreSync(){
+    if(!window._fbReady || !window._fbDb) return;
+    try{
+      // Clients listener
+      const cDoc=window._fbDoc(window._fbDb,'users',currentUser+'_clients');
+      window._fbOnSnapshot(cDoc, snap=>{
+        if(snap.exists()){
+          const data=snap.data();
+          if(data.list){
+            clients=data.list;
+            localStorage.setItem(storeKey(),JSON.stringify(clients));
+            updateStats();
+            renderTable();
+          }
+        }
+      });
+      // Properties listener
+      const pDoc=window._fbDoc(window._fbDb,'users',currentUser+'_props');
+      window._fbOnSnapshot(pDoc, snap=>{
+        if(snap.exists()){
+          const data=snap.data();
+          if(data.list){
+            properties=data.list;
+            localStorage.setItem(storeKey()+'_props',JSON.stringify(properties));
+            renderProperties();
+          }
+        }
+      });
+    }catch(e){console.warn('Firestore sync error',e);}
+  }
+
+  // Firebase module loads async — wait a moment then connect
+  if(window._fbReady){
+    startFirestoreSync();
+  } else {
+    let attempts=0;
+    const wait=setInterval(()=>{
+      attempts++;
+      if(window._fbReady){clearInterval(wait);startFirestoreSync();}
+      if(attempts>20) clearInterval(wait);
+    },300);
+  }
 }
 
 if(currentUser){
@@ -530,17 +669,40 @@ if(currentUser){
 // -------- UTILS --------
 const $ = id => document.getElementById(id);
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
-function saveStore(){localStorage.setItem(storeKey(),JSON.stringify(clients))}
+function saveStore(){
+  localStorage.setItem(storeKey(),JSON.stringify(clients));
+  if(window._fbReady && window._fbDb){
+    try{
+      window._fbSetDoc(
+        window._fbDoc(window._fbDb,'users',currentUser+'_clients'),
+        {list: clients, updatedAt: new Date().toISOString()}
+      ).catch(e=>console.warn('Firestore save error:',e));
+    }catch(e){console.warn(e);}
+  }
+}
+function savePropStore(){
+  localStorage.setItem(storeKey()+'_props',JSON.stringify(properties));
+  if(window._fbReady && window._fbDb){
+    try{
+      window._fbSetDoc(
+        window._fbDoc(window._fbDb,'users',currentUser+'_props'),
+        {list: properties, updatedAt: new Date().toISOString()}
+      ).catch(e=>console.warn('Firestore save error:',e));
+    }catch(e){console.warn(e);}
+  }
+}
 function today(){return new Date().toISOString().slice(0,10)}
 
 // -------- TABS --------
 function switchTab(t){
   document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
   document.querySelectorAll('.page').forEach(e=>e.classList.remove('active'));
-  const tabs = ['clients','add','stats','pledge'];
-  document.querySelectorAll('.tab')[tabs.indexOf(t)].classList.add('active');
+  const tabs=['clients','add','stats','properties','analysis','pledge'];
+  const idx=tabs.indexOf(t);
+  if(idx>-1) document.querySelectorAll('.tab')[idx].classList.add('active');
   $('page-'+t).classList.add('active');
   if(t==='stats') renderCharts();
+  if(t==='properties') renderProperties();
   if(t==='add' && !editingId) resetForm();
 }
 
@@ -941,6 +1103,187 @@ ${c.dealVal?`<div class="section">
   w.document.close();
 }
 
+// -------- PROPERTIES --------
+const prPropLabels={apt:'شقة',land:'أرض',villa:'فيلا',building:'مجمع/بناء',office:'مكتب/محل'};
+const prOfferLabels={sell:'للبيع',rent:'للإيجار'};
+const prStatusLabels={available:'متاح',reserved:'محجوز',sold:'مباع'};
+const prStatusClass={available:'badge-new',reserved:'badge-followup',sold:'badge-done'};
+
+function saveProperty(){
+  const area=$('pr-area').value.trim();
+  const price=$('pr-price').value;
+  if(!area||!price){alert('يرجى تعبئة المنطقة والسعر على الأقل');return;}
+  const p={
+    id:genId(),
+    type:$('pr-type').value,
+    area,price,
+    offer:$('pr-offer').value,
+    size:$('pr-size').value,
+    rooms:$('pr-rooms').value,
+    floor:$('pr-floor').value.trim(),
+    status:$('pr-status').value,
+    desc:$('pr-desc').value.trim(),
+    date:today()
+  };
+  properties.unshift(p);
+  savePropStore();
+  resetPropForm();
+  renderProperties();
+}
+function resetPropForm(){
+  ['pr-area','pr-price','pr-size','pr-floor','pr-desc'].forEach(id=>{$(id).value='';});
+  ['pr-type','pr-offer','pr-rooms','pr-status'].forEach(id=>{$(id).selectedIndex=0;});
+}
+function deleteProperty(id){
+  if(!confirm('حذف هذا العقار؟')) return;
+  properties=properties.filter(p=>p.id!==id);
+  savePropStore();renderProperties();
+}
+function renderProperties(){
+  const tbody=$('propertiesBody');
+  $('prop-count').textContent=properties.length+' عقار';
+  if(properties.length===0){tbody.innerHTML='';$('propEmpty').style.display='block';return;}
+  $('propEmpty').style.display='none';
+  tbody.innerHTML=properties.map((p,i)=>`
+    <tr>
+      <td style="color:var(--muted);font-size:.8rem">${i+1}</td>
+      <td><span class="badge badge-apt">${prPropLabels[p.type]||p.type}</span></td>
+      <td style="font-weight:700">${p.area}</td>
+      <td style="font-weight:700;color:var(--green-dark)">${p.price?Number(p.price).toLocaleString('ar-JO')+' د.أ':'-'}</td>
+      <td><span class="badge ${p.offer==='sell'?'badge-buy':'badge-rent'}">${prOfferLabels[p.offer]||p.offer}</span></td>
+      <td>${p.size?p.size+' م²':'-'}</td>
+      <td>${p.rooms||'-'}</td>
+      <td><span class="badge ${prStatusClass[p.status]||'badge-new'}">${prStatusLabels[p.status]||p.status}</span></td>
+      <td style="font-size:.8rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.desc||'-'}</td>
+      <td><button class="btn-danger" onclick="deleteProperty('${p.id}')">حذف</button></td>
+    </tr>`).join('');
+}
+
+// -------- ANALYSIS ENGINE --------
+function matchScore(client, prop){
+  let score=0; let reasons=[];
+  // Type match: buy↔sell, rent↔rent
+  if((client.type==='buy'&&prop.offer==='sell')||(client.type==='rent'&&prop.offer==='rent')){score+=30;reasons.push('نوع الطلب متطابق');}
+  // Property type
+  if(client.prop===prop.type){score+=25;reasons.push('نوع العقار متطابق');}
+  // Area match (fuzzy)
+  if(client.area&&prop.area&&(prop.area.includes(client.area)||client.area.includes(prop.area))){score+=20;reasons.push('المنطقة متطابقة');}
+  // Budget: prop price within +20% of client budget
+  const budget=parseFloat(client.budget)||0;
+  const price=parseFloat(prop.price)||0;
+  if(budget&&price){
+    if(price<=budget) {score+=15;reasons.push('السعر ضمن الميزانية');}
+    else if(price<=budget*1.2){score+=7;reasons.push('السعر قريب من الميزانية');}
+  }
+  // Rooms
+  if(client.rooms&&prop.rooms&&client.rooms===prop.rooms){score+=10;reasons.push('عدد الغرف متطابق');}
+  return {score,reasons};
+}
+
+function runAnalysis(){
+  const box=$('analysisResults');
+  if(clients.length===0){box.innerHTML='<div class="empty-state"><div class="empty-icon">👥</div><div>لا يوجد عملاء مسجّلون بعد</div></div>';return;}
+  const available=properties.filter(p=>p.status==='available');
+  if(available.length===0){box.innerHTML='<div class="empty-state"><div class="empty-icon">🏗️</div><div>لا توجد عقارات متاحة. أضف عقاراتك أولاً من تبويب "عقاراتي"</div></div>';return;}
+
+  const activeClients=clients.filter(c=>c.status!=='done'&&c.status!=='lost');
+  let html='';
+  activeClients.forEach(c=>{
+    const matches=available.map(p=>({prop:p,...matchScore(c,p)})).filter(m=>m.score>0).sort((a,b)=>b.score-a.score).slice(0,3);
+    const best=matches[0];
+    const bar=best?`<div style="height:6px;background:#f0f3fa;border-radius:3px;margin-bottom:2px"><div style="height:6px;background:${best.score>=70?'#22c55e':best.score>=40?'#f59e0b':'#e53935'};border-radius:3px;width:${best.score}%;transition:width .5s"></div></div>`:'';
+    html+=`<div class="form-card" style="margin-bottom:14px">
+      <div class="form-card-header" style="display:flex;justify-content:space-between;align-items:center">
+        <span>👤 ${c.name} — ${typeLabels[c.type]} ${propLabels[c.prop]} في ${c.area||'?'} — ميزانية: ${c.budget?Number(c.budget).toLocaleString('ar-JO')+' د.أ':'غير محددة'}</span>
+        <span class="badge ${statusClass[c.status]}">${statusLabels[c.status]}</span>
+      </div>
+      <div class="form-body">`;
+    if(matches.length===0){
+      html+=`<div style="color:var(--muted);font-size:.9rem;padding:8px 0">⚠️ لا يوجد عقار متاح مناسب لهذا العميل حالياً</div>`;
+    } else {
+      matches.forEach((m,i)=>{
+        const p=m.prop;
+        const pct=m.score;
+        const color=pct>=70?'#22c55e':pct>=40?'#f59e0b':'#e53935';
+        html+=`<div style="border:1.5px solid ${i===0?color:'var(--border)'};border-radius:10px;padding:12px 14px;margin-bottom:10px;background:${i===0?'#fafffe':'#fafbff'}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-weight:700;font-size:.92rem">${i===0?'⭐ ':i===1?'🥈 ':'🥉 '}${prPropLabels[p.type]} — ${p.area} — ${Number(p.price).toLocaleString('ar-JO')} د.أ ${p.size?'('+p.size+' م²)':''}</div>
+            <div style="background:${color};color:#fff;border-radius:20px;padding:3px 12px;font-size:.8rem;font-weight:700">${pct}% تطابق</div>
+          </div>
+          <div style="height:5px;background:#f0f3fa;border-radius:3px;margin-bottom:8px"><div style="height:5px;background:${color};border-radius:3px;width:${pct}%"></div></div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${m.reasons.map(r=>`<span style="background:#e8f0fe;color:#1a2d5a;border-radius:20px;padding:2px 10px;font-size:.78rem">✓ ${r}</span>`).join('')}
+          </div>
+          ${p.desc?`<div style="margin-top:8px;font-size:.82rem;color:var(--muted)">${p.desc}</div>`:''}
+        </div>`;
+      });
+    }
+    html+=`</div></div>`;
+  });
+  box.innerHTML=html||'<div class="empty-state"><div>لا يوجد عملاء نشطون</div></div>';
+}
+
+function printAnalysisPDF(){
+  const available=properties.filter(p=>p.status==='available');
+  const activeClients=clients.filter(c=>c.status!=='done'&&c.status!=='lost');
+  const dateStr=new Date().toLocaleDateString('ar-JO',{year:'numeric',month:'long',day:'numeric'});
+  let rows='';
+  activeClients.forEach(c=>{
+    const matches=available.map(p=>({prop:p,...matchScore(c,p)})).filter(m=>m.score>0).sort((a,b)=>b.score-a.score).slice(0,2);
+    rows+=`<div class="client-block">
+      <div class="client-header"><strong>${c.name}</strong> | ${typeLabels[c.type]} ${propLabels[c.prop]} | ${c.area||'—'} | ميزانية: ${c.budget?Number(c.budget).toLocaleString('ar-JO')+' د.أ':'—'} | <span class="status-badge">${statusLabels[c.status]}</span></div>
+      ${matches.length===0?'<div class="no-match">لا يوجد عقار مناسب متاح حالياً</div>':matches.map((m,i)=>`
+        <div class="match-row">
+          <div class="match-info">${i===0?'⭐ الأفضل: ':'🥈 بديل: '}${prPropLabels[m.prop.type]} — ${m.prop.area} — ${Number(m.prop.price).toLocaleString('ar-JO')} د.أ ${m.prop.size?'('+m.prop.size+' م²)':''}</div>
+          <div class="match-pct" style="background:${m.score>=70?'#22c55e':m.score>=40?'#f59e0b':'#e53935'}">${m.score}%</div>
+          <div class="reasons">${m.reasons.map(r=>'✓ '+r).join(' | ')}</div>
+        </div>`).join('')}
+    </div>`;
+  });
+
+  const html=`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Tajawal',sans-serif;direction:rtl;color:#1a1a2e;font-size:10.5pt;background:#fff}
+    @page{size:A4;margin:14mm 14mm 18mm 14mm}
+    .header{background:#1a2d5a;color:#fff;padding:14px 20px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+    .h-logo{font-size:16pt;font-weight:800;color:#6dc52c}
+    .h-sub{font-size:8.5pt;color:rgba(255,255,255,.7);margin-top:2px}
+    .h-date{font-size:8.5pt;color:rgba(255,255,255,.6)}
+    .report-title{background:#f0f3fa;border-right:5px solid #1a2d5a;padding:9px 14px;border-radius:0 6px 6px 0;font-size:12pt;font-weight:800;color:#1a2d5a;margin-bottom:14px}
+    .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+    .sum-card{background:#f8fafd;border:0.5px solid #d8e0ef;border-radius:7px;padding:9px 12px;text-align:center}
+    .sum-val{font-size:16pt;font-weight:800;color:#1a2d5a}
+    .sum-label{font-size:7.5pt;color:#6b7a99;margin-top:2px}
+    .client-block{border:1px solid #d8e0ef;border-radius:8px;margin-bottom:10px;overflow:hidden;page-break-inside:avoid}
+    .client-header{background:#1a2d5a;color:#fff;padding:8px 14px;font-size:9.5pt}
+    .status-badge{background:#6dc52c;color:#fff;border-radius:10px;padding:1px 8px;font-size:8pt}
+    .no-match{padding:8px 14px;color:#888;font-size:9pt}
+    .match-row{padding:8px 14px;border-top:0.5px solid #eef0f7}
+    .match-info{font-weight:700;font-size:9.5pt;margin-bottom:3px}
+    .match-pct{display:inline-block;color:#fff;border-radius:12px;padding:1px 10px;font-size:8.5pt;font-weight:700;margin-bottom:4px}
+    .reasons{font-size:8.5pt;color:#6b7a99}
+    .footer{margin-top:14px;border-top:1px solid #d8e0ef;padding-top:8px;display:flex;justify-content:space-between;font-size:8pt;color:#999}
+    @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body>
+  <div class="header">
+    <div><div class="h-logo">عمّان للعقاري</div><div class="h-sub">Amman Real Estate | تقرير تحليل العملاء</div></div>
+    <div class="h-date">${dateStr}</div>
+  </div>
+  <div class="report-title">تقرير تشبيك العملاء مع العقارات المتاحة</div>
+  <div class="summary">
+    <div class="sum-card"><div class="sum-val">${activeClients.length}</div><div class="sum-label">عملاء نشطون</div></div>
+    <div class="sum-card"><div class="sum-val">${available.length}</div><div class="sum-label">عقارات متاحة</div></div>
+    <div class="sum-card"><div class="sum-val">${activeClients.filter(c=>available.some(p=>matchScore(c,p).score>=40)).length}</div><div class="sum-label">لديهم تطابق جيد</div></div>
+  </div>
+  ${rows}
+  <div class="footer"><span>عمّان للعقاري | Amman Real Estate</span><span>وثيقة سرية — للاستخدام الداخلي</span><span>${dateStr}</span></div>
+  <script>window.onload=function(){window.print();}<\/script>
+  </body></html>`;
+  const w=window.open('','_blank');w.document.write(html);w.document.close();
+}
+
 // -------- PLEDGE PDF --------
 function getPledgeData(){
   return {
@@ -996,46 +1339,56 @@ function pledgeHTML(d){
 }
 
 function printPledge(){
-  const d = getPledgeData();
-  const {jsPDF} = window.jspdf;
-  const doc = new jsPDF({unit:'mm',format:'a4'});
-  // Header
-  doc.setFillColor(26,45,90);doc.rect(0,0,210,28,'F');
-  doc.setFontSize(14);doc.setFont('helvetica','bold');doc.setTextColor(109,197,44);
-  doc.text('Amman Real Estate',105,12,{align:'center'});
-  doc.setFontSize(10);doc.setTextColor(255,255,255);
-  doc.text('Amman Real Estate | www.amman-re.com',105,22,{align:'center'});
-  // Title
-  doc.setTextColor(26,45,90);doc.setFontSize(14);
-  doc.text('Commission Pledge / تعهد عمولة وساطة عقارية',105,38,{align:'center'});
-  doc.setDrawColor(26,45,90);doc.setLineWidth(0.5);doc.rect(20,32,170,10);
-  // Body
-  let y=52;
-  doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);
-  const lines1=doc.splitTextToSize(`I/We, the undersigned: ${d.name} - National ID: ${d.nid} - as (${d.role}),`,170);
-  doc.text(lines1,20,y);y+=lines1.length*6+3;
-  const lines2=doc.splitTextToSize(`hereby acknowledge that I have viewed the property (${d.propType}) located in (${d.area}) through the real estate broker: ${d.broker}.`,170);
-  doc.text(lines2,20,y);y+=lines2.length*6+6;
-  doc.setFont('helvetica','bold');doc.text('Therefore, I hereby pledge:',20,y);y+=8;
-  doc.setFont('helvetica','normal');
-  const items=[
-    `1. أتعهد بدفع عمولة وساطة عقارية نسبتها (${d.comm}%) من إجمالي قيمة البيع أو الإيجار المتفق عليها، وذلك فور إتمام عملية التوقيع على العقد أو دفع مبلغ العربون.`,
-    `2. أتعهد بدفع العمولة المذكورة في جميع الأحوال، سواء أتمت الصفقة بصورة مباشرة أو غير مباشرة، وسواء كان الطرف المتعامل معه هو الموقع أدناه شخصياً أو أي طرف آخر يمت له بصلة، كالأقارب والشركاء والمفوضين، وذلك في حال كان العقار قد عرض عليه سابقاً من خلال الوسيط العقاري.`,
-    `3. في حال امتنع المشتري عن إتمام الصفقة أو تراجع عنها بعد توقيع عقد البيع، يحق للوسيط العقاري استيفاء عمولته كاملة من مبلغ العربون المدفوع، وفقاً للأعراف والأحكام المعمول بها.`
-  ];
-  items.forEach(item=>{const l=doc.splitTextToSize(item,165);doc.text(l,22,y);y+=l.length*6+4;});
-  // Signature section
-  y+=10;
-  doc.setDrawColor(100,100,100);doc.setLineWidth(0.3);
-  [[20,'Name: '+d.name],[90,'Signature: ..................'],[160,'Date: '+d.date]].forEach(([x,l])=>{
-    doc.line(x,y,x+60,y);
-    doc.setFontSize(9);doc.text(l,x,y+5);
-  });
-  // Footer
-  doc.setFillColor(26,45,90);doc.rect(0,285,210,12,'F');
-  doc.setFontSize(8);doc.setTextColor(255,255,255);
-  doc.text('Amman Real Estate | '+new Date().toLocaleDateString('en-GB'),105,292,{align:'center'});
-  doc.save('pledge-'+d.name.replace(/\s/g,'-')+'.pdf');
+  const d=getPledgeData();
+  const dateStr=d.date?new Date(d.date).toLocaleDateString('ar-JO',{year:'numeric',month:'long',day:'numeric'}):d.date;
+  const html=`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Tajawal',sans-serif;direction:rtl;color:#1a1a2e;font-size:11pt;background:#fff;padding:20mm 18mm}
+    @page{size:A4;margin:0}
+    .header{background:#1a2d5a;color:#fff;padding:16px 22px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
+    .h-logo{font-size:18pt;font-weight:800;color:#6dc52c}
+    .h-sub{font-size:9pt;color:rgba(255,255,255,.7);margin-top:3px}
+    .title-box{text-align:center;border:2.5px solid #1a2d5a;border-radius:8px;padding:10px 30px;display:inline-block;margin-bottom:22px;font-size:14pt;font-weight:800;color:#1a2d5a}
+    .title-wrap{text-align:center;margin-bottom:22px}
+    .body-text{line-height:2.2;font-size:10.5pt;color:#1a1a2e;margin-bottom:16px}
+    .bold{font-weight:700}
+    .pledge-title{font-weight:800;font-size:11pt;margin-bottom:10px;color:#1a2d5a}
+    ol{padding-right:22px;line-height:2.4;font-size:10.5pt;color:#1a1a2e}
+    ol li{margin-bottom:6px}
+    .sig-section{margin-top:40px;display:flex;justify-content:space-between;gap:20px}
+    .sig-box{flex:1;border-top:1.5px solid #1a2d5a;padding-top:10px;text-align:center}
+    .sig-label{font-size:9.5pt;font-weight:700;color:#1a2d5a;margin-bottom:8px}
+    .sig-val{font-size:9.5pt;color:#444;min-height:24px}
+    .footer{margin-top:30px;border-top:1px solid #d8e0ef;padding-top:10px;display:flex;justify-content:space-between;font-size:8.5pt;color:#999}
+    @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body>
+  <div class="header">
+    <div><div class="h-logo">عمّان للعقاري</div><div class="h-sub">Amman Real Estate</div></div>
+    <div style="font-size:9pt;color:rgba(255,255,255,.7)">${dateStr}</div>
+  </div>
+  <div class="title-wrap"><div class="title-box">تعهد وإقرار بدفع عمولة وساطة عقارية</div></div>
+  <div class="body-text">
+    أقر أنا الموقّع أدناه: <span class="bold">${d.name}</span>، بصفتي (<span class="bold">${d.role}</span>)، وأحمل الرقم الوطني: <span class="bold">${d.nid}</span>،
+    بأنني قد عاينتُ العقار التالي (<span class="bold">${d.propType}</span>) الواقع في منطقة (<span class="bold">${d.area}</span>) والشركات والملاك التابعين له،
+    وذلك عن طريق الوسيط العقاري: <span class="bold">${d.broker}</span>.
+  </div>
+  <div class="pledge-title">وعليه أتعهد بما يلي:</div>
+  <ol>
+    <li>أتعهد بدفع عمولة وساطة عقارية نسبتها (<span class="bold">${d.comm}%</span>) من إجمالي قيمة البيع أو الإيجار المتفق عليها، وذلك فور إتمام عملية التوقيع على العقد أو دفع مبلغ العربون.</li>
+    <li>أتعهد بدفع العمولة المذكورة في جميع الأحوال، سواء أُتمَّت الصفقة بصورة مباشرة أو غير مباشرة، وسواء كان الطرف المُتعامَل معه هو الموقّع أدناه شخصياً أو أيّ طرف آخر يمتّ له بصلة، كالأقارب والشركاء والمُفوَّضين، وذلك في حال كان العقار قد عُرض عليه سابقاً من خلال الوسيط العقاري.</li>
+    <li>في حال امتنع المشتري عن إتمام الصفقة أو تراجع عنها بعد توقيع عقد البيع، يحقّ للوسيط العقاري استيفاء عمولته كاملةً من مبلغ العربون المدفوع، وفقاً للأعراف والأحكام المعمول بها.</li>
+  </ol>
+  <div class="sig-section">
+    <div class="sig-box"><div class="sig-label">اسم المُقِرّ</div><div class="sig-val">${d.name}</div></div>
+    <div class="sig-box"><div class="sig-label">التوقيع</div><div class="sig-val" style="color:#ccc">.............................</div></div>
+    <div class="sig-box"><div class="sig-label">التاريخ</div><div class="sig-val">${dateStr}</div></div>
+  </div>
+  <div class="footer"><span>عمّان للعقاري | Amman Real Estate</span><span>وثيقة قانونية — تحتفظ الشركة بنسخة منها</span><span>${dateStr}</span></div>
+  <script>window.onload=function(){window.print();}<\/script>
+  </body></html>`;
+  const w=window.open('','_blank');w.document.write(html);w.document.close();
 }
 
 // -------- EXPORT CSV --------
