@@ -227,7 +227,8 @@
   </div>
   <div class="header-btns">
     <button class="btn btn-green" onclick="openAddModal()">＋ إضافة عميل</button>
-    <button class="btn btn-outline" onclick="exportAllCSV()">تصدير CSV</button>
+    <button class="btn btn-outline" onclick="exportClientsExcel()">📊 Excel العملاء</button>
+    <button class="btn btn-outline" onclick="exportPropertiesExcel()">📊 Excel العقارات</button>
     <button class="btn btn-outline" onclick="logout()" style="border-color:rgba(255,100,100,.5);color:#ffaaaa">خروج</button>
   </div>
 </div>
@@ -493,7 +494,7 @@
     </div>
     <div class="form-actions">
       <button type="button" class="btn-secondary" onclick="resetPropForm()">مسح</button>
-      <button type="button" class="btn-primary" onclick="saveProperty()">💾 حفظ العقار</button>
+      <button type="button" id="propSubmitBtn" class="btn-primary" onclick="saveProperty()">💾 حفظ العقار</button>
     </div>
   </div>
 
@@ -1095,14 +1096,15 @@ const prPropLabels={apt:'شقة',land:'أرض',villa:'فيلا',building:'مجم
 const prOfferLabels={sell:'للبيع',rent:'للإيجار'};
 const prStatusLabels={available:'متاح',reserved:'محجوز',sold:'مباع'};
 const prStatusClass={available:'badge-new',reserved:'badge-followup',sold:'badge-done'};
+let editingPropId=null;
 
 function saveProperty(){
   const area=$('pr-area').value.trim();
   const price=$('pr-price').value;
   if(!area||!price){alert('يرجى تعبئة المنطقة والسعر على الأقل');return;}
   const p={
-    id:genId(),
-    addedBy:currentUser,
+    id:editingPropId||genId(),
+    addedBy:editingPropId?(properties.find(x=>x.id===editingPropId)?.addedBy||currentUser):currentUser,
     type:$('pr-type').value,
     area,price,
     offer:$('pr-offer').value,
@@ -1111,9 +1113,16 @@ function saveProperty(){
     floor:$('pr-floor').value.trim(),
     status:$('pr-status').value,
     desc:$('pr-desc').value.trim(),
-    date:today()
+    date:editingPropId?(properties.find(x=>x.id===editingPropId)?.date||today()):today()
   };
-  properties.unshift(p);
+  if(editingPropId){
+    const idx=properties.findIndex(x=>x.id===editingPropId);
+    if(idx>-1) properties[idx]=p;
+  } else {
+    properties.unshift(p);
+  }
+  editingPropId=null;
+  $('propSubmitBtn').textContent='💾 حفظ العقار';
   savePropStore();
   resetPropForm();
   renderProperties();
@@ -1121,6 +1130,25 @@ function saveProperty(){
 function resetPropForm(){
   ['pr-area','pr-price','pr-size','pr-floor','pr-desc'].forEach(id=>{$(id).value='';});
   ['pr-type','pr-offer','pr-rooms','pr-status'].forEach(id=>{$(id).selectedIndex=0;});
+  editingPropId=null;
+  if($('propSubmitBtn')) $('propSubmitBtn').textContent='💾 حفظ العقار';
+}
+function editProperty(id){
+  const p=properties.find(x=>x.id===id);
+  if(!p) return;
+  editingPropId=id;
+  $('pr-area').value=p.area||'';
+  $('pr-price').value=p.price||'';
+  $('pr-size').value=p.size||'';
+  $('pr-floor').value=p.floor||'';
+  $('pr-desc').value=p.desc||'';
+  $('pr-type').value=p.type||'apt';
+  $('pr-offer').value=p.offer||'sell';
+  $('pr-rooms').value=p.rooms||'';
+  $('pr-status').value=p.status||'available';
+  $('propSubmitBtn').textContent='💾 تحديث العقار';
+  window.scrollTo(0,0);
+  $('pr-area').focus();
 }
 function deleteProperty(id){
   if(!confirm('حذف هذا العقار؟')) return;
@@ -1143,8 +1171,13 @@ function renderProperties(){
       <td>${p.rooms||'-'}</td>
       <td><span class="badge ${prStatusClass[p.status]||'badge-new'}">${prStatusLabels[p.status]||p.status}</span></td>
       <td><span style="background:${p.addedBy==='MOATH'?'#e0f2fe':'#f3e8ff'};color:${p.addedBy==='MOATH'?'#0369a1':'#6b21a8'};border-radius:20px;padding:3px 10px;font-size:.75rem;font-weight:700">${p.addedBy||'-'}</span></td>
-      <td style="font-size:.8rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.desc||'-'}</td>
-      <td><button class="btn-danger" onclick="deleteProperty('${p.id}')">حذف</button></td>
+      <td style="font-size:.8rem;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.desc||''}">${p.desc||'-'}</td>
+      <td>
+        <div class="actions">
+          <button class="btn-pdf" onclick="editProperty('${p.id}')">تعديل</button>
+          <button class="btn-danger" onclick="deleteProperty('${p.id}')">حذف</button>
+        </div>
+      </td>
     </tr>`).join('');
 }
 
@@ -1380,14 +1413,49 @@ function printPledge(){
   const w=window.open('','_blank');w.document.write(html);w.document.close();
 }
 
-// -------- EXPORT CSV --------
-function exportAllCSV(){
+// -------- EXPORT EXCEL --------
+function toXLS(headers, rows, filename){
+  // Build HTML table that Excel opens natively with Arabic support
+  const tableRows=rows.map(r=>'<tr>'+r.map(v=>`<td>${(v||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</td>`).join('')+'</tr>').join('');
+  const html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>البيانات</x:Name><x:WorksheetOptions><x:DisplayRightToLeft/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
+<body><table dir="rtl" border="1" style="font-family:Tajawal,Arial;font-size:11pt">
+<thead style="background:#1a2d5a;color:#fff"><tr>${headers.map(h=>`<th style="background:#1a2d5a;color:#fff;padding:8px 12px;font-weight:bold">${h}</th>`).join('')}</tr></thead>
+<tbody>${tableRows}</tbody></table></body></html>`;
+  const blob=new Blob(['\uFEFF'+html],{type:'application/vnd.ms-excel;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=filename+'-'+new Date().toISOString().slice(0,10)+'.xls';
+  a.click();
+}
+
+function exportClientsExcel(){
   if(clients.length===0){alert('لا توجد بيانات للتصدير');return;}
-  const headers=['الاسم','الهاتف','الرقم الوطني','نوع الطلب','العقار','المنطقة','الميزانية','الغرف','المساحة','الحالة','تاريخ الطلب','المصدر','ملاحظات'];
-  const rows = clients.map(c=>[c.name,c.phone,c.nid,typeLabels[c.type]||c.type,propLabels[c.prop]||c.prop,c.area,c.budget,c.rooms,c.size,statusLabels[c.status],c.date,c.source,c.notes].map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(','));
-  const csv='\uFEFF'+headers.join(',')+'\n'+rows.join('\n');
-  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
-  a.download='amman-realestate-clients-'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  const headers=['الاسم','الهاتف','الرقم الوطني','البريد','نوع الطلب','نوع العقار','المنطقة','الميزانية (د.أ)','الغرف','المساحة (م²)','الحالة','تاريخ الطلب','المصدر','آخر تواصل','موعد المتابعة','قيمة الصفقة','نسبة العمولة','قيمة العمولة','ملاحظات هندسية','ملاحظات عامة','أضافه'];
+  const rows=clients.map(c=>[
+    c.name,c.phone,c.nid,c.email,
+    typeLabels[c.type]||c.type,propLabels[c.prop]||c.prop,
+    c.area,c.budget,c.rooms,c.size,
+    statusLabels[c.status],c.date,c.source,
+    c.lastcontact,c.nextfollow,
+    c.dealVal,c.commission?c.commission+'%':'',c.commVal,
+    c.eng,c.notes,c.addedBy
+  ]);
+  toXLS(headers,rows,'عملاء-عمّان-للعقاري');
+}
+
+function exportPropertiesExcel(){
+  if(properties.length===0){alert('لا توجد عقارات للتصدير');return;}
+  const headers=['نوع العقار','المنطقة','السعر (د.أ)','نوع العرض','المساحة (م²)','الغرف','الطابق','الحالة','الوصف','تاريخ الإضافة','أضافه'];
+  const rows=properties.map(p=>[
+    prPropLabels[p.type]||p.type,
+    p.area,p.price,
+    prOfferLabels[p.offer]||p.offer,
+    p.size,p.rooms,p.floor,
+    prStatusLabels[p.status]||p.status,
+    p.desc,p.date,p.addedBy
+  ]);
+  toXLS(headers,rows,'عقارات-عمّان-للعقاري');
 }
 
 // -------- INIT --------
