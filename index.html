@@ -7,28 +7,27 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getFirestore, doc, setDoc, onSnapshot, collection } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { getDatabase, ref, set, onValue } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 
   const firebaseConfig = {
     apiKey: "AIzaSyASSUYkSpOIM-10jqWQ0ojqEv886NNdCTQ",
     authDomain: "ammanre-30778.firebaseapp.com",
+    databaseURL: "https://ammanre-30778-default-rtdb.firebaseio.com",
     projectId: "ammanre-30778",
     storageBucket: "ammanre-30778.firebasestorage.app",
     messagingSenderId: "907674537431",
-    appId: "1:907674537431:web:908cd4a8e402296ce0cf92",
-    measurementId: "G-DXJRNLKL02"
+    appId: "1:907674537431:web:908cd4a8e402296ce0cf92"
   };
 
   try {
     const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    const db = getDatabase(app);
     window._fbDb = db;
-    window._fbDoc = doc;
-    window._fbSetDoc = setDoc;
-    window._fbOnSnapshot = onSnapshot;
-    window._fbCollection = collection;
+    window._fbRef = ref;
+    window._fbSet = set;
+    window._fbOnValue = onValue;
     window._fbReady = true;
-    console.log('Firebase Firestore connected ✅');
+    console.log('Realtime Database connected ✅');
   } catch(e) {
     window._fbReady = false;
     console.warn('Firebase error:', e);
@@ -224,6 +223,7 @@
       <text x="110" y="52" font-family="Arial,sans-serif" font-size="11" font-weight="700" fill="white" text-anchor="middle">Amman Real Estate</text>
     </svg>
     <div class="header-title">نظام إدارة العملاء<span id="headerUser"></span></div>
+    <span id="syncStatus" style="font-size:.7rem;padding:3px 10px;border-radius:20px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.5);margin-right:8px">جاري الاتصال...</span>
   </div>
   <div class="header-btns">
     <button class="btn btn-green" onclick="openAddModal()">＋ إضافة عميل</button>
@@ -291,6 +291,7 @@
             <th>المنطقة</th>
             <th>الميزانية (د.أ)</th>
             <th>الحالة</th>
+            <th>أضافه</th>
             <th>التاريخ</th>
             <th>إجراءات</th>
           </tr>
@@ -503,7 +504,7 @@
     </div>
     <div style="overflow-x:auto">
       <table>
-        <thead><tr><th>#</th><th>النوع</th><th>المنطقة</th><th>السعر</th><th>العرض</th><th>المساحة</th><th>الغرف</th><th>الحالة</th><th>الوصف</th><th>إجراءات</th></tr></thead>
+        <thead><tr><th>#</th><th>النوع</th><th>المنطقة</th><th>السعر</th><th>العرض</th><th>المساحة</th><th>الغرف</th><th>الحالة</th><th>أضافه</th><th>الوصف</th><th>إجراءات</th></tr></thead>
         <tbody id="propertiesBody"></tbody>
       </table>
       <div class="empty-state" id="propEmpty" style="display:none"><div class="empty-icon">🏗️</div><div>لا توجد عقارات. أضف أول عقار!</div></div>
@@ -600,7 +601,7 @@ function logout(){
   document.getElementById('loginErr').style.display='none';
 }
 
-function storeKey(){return 'amman_re_clients_'+currentUser;}
+function storeKey(){return 'amman_re_shared';} // shared localStorage key
 
 let clients=[];
 let properties=[];
@@ -608,54 +609,46 @@ let editingId=null;
 let charts={};
 
 function initApp(){
-  // Load from localStorage immediately (instant display)
-  clients=JSON.parse(localStorage.getItem(storeKey())||'[]');
-  properties=JSON.parse(localStorage.getItem(storeKey()+'_props')||'[]');
+  clients=JSON.parse(localStorage.getItem('amman_re_shared_clients')||'[]');
+  properties=JSON.parse(localStorage.getItem('amman_re_shared_props')||'[]');
   updateStats();
   renderTable();
 
-  // Sync with Firestore when ready
-  function startFirestoreSync(){
-    if(!window._fbReady || !window._fbDb) return;
+  function startSync(){
+    if(!window._fbReady||!window._fbDb) return;
     try{
-      // Clients listener
-      const cDoc=window._fbDoc(window._fbDb,'users',currentUser+'_clients');
-      window._fbOnSnapshot(cDoc, snap=>{
-        if(snap.exists()){
-          const data=snap.data();
-          if(data.list){
-            clients=data.list;
-            localStorage.setItem(storeKey(),JSON.stringify(clients));
-            updateStats();
-            renderTable();
-          }
+      const setSyncStatus=(ok)=>{
+        const el=document.getElementById('syncStatus');
+        if(!el) return;
+        el.textContent=ok?'☁️ متزامن':'💾 محلي فقط';
+        el.style.background=ok?'rgba(109,197,44,.2)':'rgba(255,150,50,.2)';
+        el.style.color=ok?'#6dc52c':'#f59e0b';
+      };
+      window._fbOnValue(window._fbRef(window._fbDb,'shared/clients'),snap=>{
+        setSyncStatus(true);
+        const val=snap.val();
+        if(val){
+          clients=Object.values(val);
+          localStorage.setItem('amman_re_shared_clients',JSON.stringify(clients));
+          updateStats();
+          renderTable();
+        }
+      },err=>{setSyncStatus(false);console.warn(err);});
+      window._fbOnValue(window._fbRef(window._fbDb,'shared/properties'),snap=>{
+        const val=snap.val();
+        if(val){
+          properties=Object.values(val);
+          localStorage.setItem('amman_re_shared_props',JSON.stringify(properties));
+          renderProperties();
         }
       });
-      // Properties listener
-      const pDoc=window._fbDoc(window._fbDb,'users',currentUser+'_props');
-      window._fbOnSnapshot(pDoc, snap=>{
-        if(snap.exists()){
-          const data=snap.data();
-          if(data.list){
-            properties=data.list;
-            localStorage.setItem(storeKey()+'_props',JSON.stringify(properties));
-            renderProperties();
-          }
-        }
-      });
-    }catch(e){console.warn('Firestore sync error',e);}
+    }catch(e){console.warn('DB sync error',e);}
   }
 
-  // Firebase module loads async — wait a moment then connect
-  if(window._fbReady){
-    startFirestoreSync();
-  } else {
-    let attempts=0;
-    const wait=setInterval(()=>{
-      attempts++;
-      if(window._fbReady){clearInterval(wait);startFirestoreSync();}
-      if(attempts>20) clearInterval(wait);
-    },300);
+  if(window._fbReady){startSync();}
+  else{
+    let n=0;
+    const t=setInterval(()=>{n++;if(window._fbReady){clearInterval(t);startSync();}if(n>30)clearInterval(t);},300);
   }
 }
 
@@ -670,25 +663,17 @@ if(currentUser){
 const $ = id => document.getElementById(id);
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
 function saveStore(){
-  localStorage.setItem(storeKey(),JSON.stringify(clients));
-  if(window._fbReady && window._fbDb){
-    try{
-      window._fbSetDoc(
-        window._fbDoc(window._fbDb,'users',currentUser+'_clients'),
-        {list: clients, updatedAt: new Date().toISOString()}
-      ).catch(e=>console.warn('Firestore save error:',e));
-    }catch(e){console.warn(e);}
+  localStorage.setItem('amman_re_shared_clients',JSON.stringify(clients));
+  if(window._fbReady&&window._fbDb){
+    const obj={};clients.forEach(c=>{obj[c.id]=c;});
+    window._fbSet(window._fbRef(window._fbDb,'shared/clients'),obj).catch(e=>console.warn('DB save error:',e));
   }
 }
 function savePropStore(){
-  localStorage.setItem(storeKey()+'_props',JSON.stringify(properties));
-  if(window._fbReady && window._fbDb){
-    try{
-      window._fbSetDoc(
-        window._fbDoc(window._fbDb,'users',currentUser+'_props'),
-        {list: properties, updatedAt: new Date().toISOString()}
-      ).catch(e=>console.warn('Firestore save error:',e));
-    }catch(e){console.warn(e);}
+  localStorage.setItem('amman_re_shared_props',JSON.stringify(properties));
+  if(window._fbReady&&window._fbDb){
+    const obj={};properties.forEach(p=>{obj[p.id]=p;});
+    window._fbSet(window._fbRef(window._fbDb,'shared/properties'),obj).catch(e=>console.warn('DB save error:',e));
   }
 }
 function today(){return new Date().toISOString().slice(0,10)}
@@ -752,6 +737,7 @@ function renderTable(){
       <td>${c.area||'-'}</td>
       <td style="font-weight:700">${c.budget?Number(c.budget).toLocaleString('ar-JO'):'-'}</td>
       <td><span class="badge ${statusClass[c.status]}">${statusLabels[c.status]}</span></td>
+      <td><span style="background:${c.addedBy==='MOATH'?'#e0f2fe':'#f3e8ff'};color:${c.addedBy==='MOATH'?'#0369a1':'#6b21a8'};border-radius:20px;padding:3px 10px;font-size:.75rem;font-weight:700">${c.addedBy||'-'}</span></td>
       <td style="font-size:.8rem;color:var(--muted)">${c.date||'-'}</td>
       <td>
         <div class="actions">
@@ -776,6 +762,7 @@ function calcComm(){
 function getFormData(){
   return {
     id: editingId||genId(),
+    addedBy: currentUser,
     name:$('f-name').value.trim(),
     phone:$('f-phone').value.trim(),
     nid:$('f-nid').value.trim(),
@@ -1115,6 +1102,7 @@ function saveProperty(){
   if(!area||!price){alert('يرجى تعبئة المنطقة والسعر على الأقل');return;}
   const p={
     id:genId(),
+    addedBy:currentUser,
     type:$('pr-type').value,
     area,price,
     offer:$('pr-offer').value,
@@ -1154,6 +1142,7 @@ function renderProperties(){
       <td>${p.size?p.size+' م²':'-'}</td>
       <td>${p.rooms||'-'}</td>
       <td><span class="badge ${prStatusClass[p.status]||'badge-new'}">${prStatusLabels[p.status]||p.status}</span></td>
+      <td><span style="background:${p.addedBy==='MOATH'?'#e0f2fe':'#f3e8ff'};color:${p.addedBy==='MOATH'?'#0369a1':'#6b21a8'};border-radius:20px;padding:3px 10px;font-size:.75rem;font-weight:700">${p.addedBy||'-'}</span></td>
       <td style="font-size:.8rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.desc||'-'}</td>
       <td><button class="btn-danger" onclick="deleteProperty('${p.id}')">حذف</button></td>
     </tr>`).join('');
